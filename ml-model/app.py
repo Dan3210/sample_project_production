@@ -244,7 +244,9 @@ def batch_predict():
 
         if len(texts) > 100:
             return (
-                jsonify({"error": "Too many texts. Maximum 100 texts allowed."}),
+                jsonify(
+                    {"error": "Too many texts. Maximum 100 texts allowed."}
+                ),
                 400,
             )
 

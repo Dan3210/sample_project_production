@@ -17,8 +17,12 @@ logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 
-# AWS Services
-cloudwatch = boto3.client('cloudwatch', region_name=os.getenv('AWS_DEFAULT_REGION', 'us-east-2'))
+# AWS Services - Initialize with error handling
+cloudwatch = None
+try:
+    cloudwatch = boto3.client('cloudwatch', region_name=os.getenv('AWS_DEFAULT_REGION', 'us-east-2'))
+except Exception as e:
+    logger.warning(f"CloudWatch not available: {e}")
 
 class SentimentAnalyzer:
     """Simple sentiment analysis model"""
@@ -79,6 +83,10 @@ model = SentimentAnalyzer()
 
 def put_metric(metric_name: str, value: float, unit: str = 'Count'):
     """Put custom metric to CloudWatch"""
+    if cloudwatch is None:
+        logger.debug(f"CloudWatch not available, skipping metric: {metric_name}")
+        return
+        
     try:
         cloudwatch.put_metric_data(
             Namespace='MLModel/SentimentAnalysis',

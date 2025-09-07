@@ -9,11 +9,9 @@ from unittest.mock import patch, MagicMock
 @pytest.fixture(autouse=True)
 def mock_aws_services():
     """Mock AWS services for testing"""
-    with patch('boto3.client') as mock_client:
+    with patch('app.cloudwatch') as mock_cloudwatch:
         # Mock CloudWatch client
-        mock_cloudwatch = MagicMock()
         mock_cloudwatch.put_metric_data.return_value = {}
-        mock_client.return_value = mock_cloudwatch
         yield mock_cloudwatch
 
 @pytest.fixture(autouse=True)

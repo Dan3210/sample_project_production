@@ -188,7 +188,8 @@ def predict_sentiment():
             return (
                 jsonify(
                     {
-                        "error": "Text too long. Maximum 1000 characters allowed."
+                        "error": "Text too long. Maximum 1000 characters "
+                        "allowed."
                     }
                 ),
                 400,
@@ -301,7 +302,8 @@ def get_metrics():
                         "supported_languages": ["en"],
                     },
                     "performance": {
-                        "total_predictions": 0,  # Would be tracked in production
+                        # Would be tracked in production
+                        "total_predictions": 0,
                         "average_confidence": 0.0,
                         "accuracy": 0.0,
                     },

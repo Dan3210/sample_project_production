@@ -51,7 +51,10 @@ class SentimentAnalyzer:
             }
         
         text_lower = text.lower()
-        words = text_lower.split()
+        # Remove punctuation and split into words
+        import string
+        text_clean = text_lower.translate(str.maketrans('', '', string.punctuation))
+        words = text_clean.split()
         
         positive_count = sum(1 for word in words if word in self.positive_words)
         negative_count = sum(1 for word in words if word in self.negative_words)

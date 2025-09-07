@@ -271,7 +271,7 @@ def root():
             },
             'batch_predict': {
                 'method': 'POST',
-                'body': {'texts': ['string1', 'string2', ...]},
+                'body': {'texts': ['string1', 'string2']},
                 'description': 'Predict sentiment of multiple texts'
             }
         }

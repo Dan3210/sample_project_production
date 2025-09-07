@@ -85,11 +85,17 @@ class SentimentAnalyzer:
         # Remove punctuation and split into words
         import string
 
-        text_clean = text_lower.translate(str.maketrans("", "", string.punctuation))
+        text_clean = text_lower.translate(
+            str.maketrans("", "", string.punctuation)
+        )
         words = text_clean.split()
 
-        positive_count = sum(1 for word in words if word in self.positive_words)
-        negative_count = sum(1 for word in words if word in self.negative_words)
+        positive_count = sum(
+            1 for word in words if word in self.positive_words
+        )
+        negative_count = sum(
+            1 for word in words if word in self.negative_words
+        )
 
         total_sentiment_words = positive_count + negative_count
 
@@ -121,7 +127,9 @@ model = SentimentAnalyzer()
 def put_metric(metric_name: str, value: float, unit: str = "Count"):
     """Put custom metric to CloudWatch"""
     if cloudwatch is None:
-        logger.debug(f"CloudWatch not available, skipping metric: {metric_name}")
+        logger.debug(
+            f"CloudWatch not available, skipping metric: {metric_name}"
+        )
         return
 
     try:
@@ -179,7 +187,9 @@ def predict_sentiment():
         if len(text) > 1000:
             return (
                 jsonify(
-                    {"error": "Text too long. Maximum 1000 characters allowed."}
+                    {
+                        "error": "Text too long. Maximum 1000 characters allowed."
+                    }
                 ),
                 400,
             )
@@ -212,7 +222,9 @@ def predict_sentiment():
         logger.error(f"Error in prediction: {str(e)}")
         put_metric("Errors", 1)
 
-        return jsonify({"error": "Internal server error", "message": str(e)}), 500
+        return jsonify(
+            {"error": "Internal server error", "message": str(e)}
+        ), 500
 
 
 @app.route("/batch-predict", methods=["POST"])
@@ -231,7 +243,9 @@ def batch_predict():
 
         if len(texts) > 100:
             return (
-                jsonify({"error": "Too many texts. Maximum 100 texts allowed."}),
+                jsonify(
+                    {"error": "Too many texts. Maximum 100 texts allowed."}
+                ),
                 400,
             )
 
@@ -266,7 +280,9 @@ def batch_predict():
         logger.error(f"Error in batch prediction: {str(e)}")
         put_metric("Errors", 1)
 
-        return jsonify({"error": "Internal server error", "message": str(e)}), 500
+        return jsonify(
+            {"error": "Internal server error", "message": str(e)}
+        ), 500
 
 
 @app.route("/metrics", methods=["GET"])
@@ -301,7 +317,9 @@ def get_metrics():
 
     except Exception as e:
         logger.error(f"Error getting metrics: {str(e)}")
-        return jsonify({"error": "Internal server error", "message": str(e)}), 500
+        return jsonify(
+            {"error": "Internal server error", "message": str(e)}
+        ), 500
 
 
 @app.route("/", methods=["GET"])

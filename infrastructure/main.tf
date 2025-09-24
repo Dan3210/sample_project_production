@@ -25,10 +25,10 @@ data "aws_caller_identity" "current" {}
 # VPC Module
 module "vpc" {
   source = "./modules/vpc"
-  
-  project_name     = var.project_name
-  environment      = var.environment
-  vpc_cidr         = var.vpc_cidr
+
+  project_name       = var.project_name
+  environment        = var.environment
+  vpc_cidr           = var.vpc_cidr
   availability_zones = data.aws_availability_zones.available.names
 }
 
@@ -134,7 +134,7 @@ resource "aws_ecs_task_definition" "main" {
     {
       name  = "${var.project_name}-${var.environment}-container"
       image = "${aws_ecr_repository.ml_model.repository_url}:latest"
-      
+
       portMappings = [
         {
           containerPort = 8080

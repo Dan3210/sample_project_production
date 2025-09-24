@@ -4,12 +4,12 @@
   "requiresCompatibilities": ["FARGATE"],
   "cpu": "512",
   "memory": "1024",
-  "executionRoleArn": "arn:aws:iam::ACCOUNT_ID:role/ml-devops-dev-ecs-execution-role",
-  "taskRoleArn": "arn:aws:iam::ACCOUNT_ID:role/ml-devops-dev-ecs-task-role",
+  "executionRoleArn": "arn:aws:iam::730335221337:role/ml-devops-dev-ecs-execution-role",
+  "taskRoleArn": "arn:aws:iam::730335221337:role/ml-devops-dev-ecs-task-role",
   "containerDefinitions": [
     {
       "name": "ml-devops-dev-container",
-      "image": "ACCOUNT_ID.dkr.ecr.us-east-2.amazonaws.com/ml-devops-dev-ml-model:latest",
+      "image": "730335221337.dkr.ecr.us-east-2.amazonaws.com/ml-devops-dev-ml-model:latest",
       "portMappings": [
         {
           "containerPort": 8080,

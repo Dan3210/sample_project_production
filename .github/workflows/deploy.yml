@@ -48,67 +48,9 @@ jobs:
         flake8 app.py
         black --check app.py
 
-  build-and-deploy:
-    needs: test
-    runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main'
-    
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-
-    - name: Configure AWS credentials
-      uses: aws-actions/configure-aws-credentials@v4
-      with:
-        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-        aws-region: ${{ env.AWS_REGION }}
-
-    - name: Login to Amazon ECR
-      id: login-ecr
-      uses: aws-actions/amazon-ecr-login@v2
-
-    - name: Build, tag, and push image to Amazon ECR
-      id: build-image
-      env:
-        ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-        IMAGE_TAG: ${{ github.sha }}
-      run: |
-        cd ml-model
-        docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
-        docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:latest .
-        docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
-        docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
-        echo "image=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> $GITHUB_OUTPUT
-
-    - name: Fill in the new image ID in the Amazon ECS task definition
-      id: task-def
-      uses: aws-actions/amazon-ecs-render-task-definition@v1
-      with:
-        task-definition: infrastructure/task-definition.json
-        container-name: ml-devops-dev-container
-        image: ${{ steps.build-image.outputs.image }}
-
-    - name: Deploy Amazon ECS task definition
-      uses: aws-actions/amazon-ecs-deploy-task-definition@v1
-      with:
-        task-definition: ${{ steps.task-def.outputs.task-definition }}
-        service: ${{ env.ECS_SERVICE }}
-        cluster: ${{ env.ECS_CLUSTER }}
-        wait-for-service-stability: true
-
-    - name: Run health check
-      run: |
-        echo "Waiting for service to be healthy..."
-        sleep 60
-        ALB_DNS=$(aws elbv2 describe-load-balancers --names ml-devops-dev-alb --query 'LoadBalancers[0].DNSName' --output text)
-        echo "Testing health endpoint: http://$ALB_DNS/health"
-        curl -f http://$ALB_DNS/health || exit 1
-        echo "Health check passed!"
-
   infrastructure:
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main' && contains(github.event.head_commit.message, '[infra]')
+    if: github.ref == 'refs/heads/main'
     
     steps:
     - name: Checkout code
@@ -143,8 +85,97 @@ jobs:
       working-directory: infrastructure
 
     - name: Terraform Apply
-      run: terraform apply tfplan
+      run: terraform apply -auto-approve
       working-directory: infrastructure
+
+  build-and-deploy:
+    needs: [test, infrastructure]
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ${{ env.AWS_REGION }}
+
+    - name: Wait for ECR repository
+      run: |
+        echo "Waiting for ECR repository to be created..."
+        for i in {1..30}; do
+          if aws ecr describe-repositories --repository-names ${{ env.ECR_REPOSITORY }} --region ${{ env.AWS_REGION }} >/dev/null 2>&1; then
+            echo "ECR repository is ready!"
+            break
+          fi
+          echo "Attempt $i: ECR repository not ready yet, waiting 10 seconds..."
+          sleep 10
+        done
+        
+        # Verify repository exists
+        aws ecr describe-repositories --repository-names ${{ env.ECR_REPOSITORY }} --region ${{ env.AWS_REGION }}
+
+    - name: Login to Amazon ECR
+      id: login-ecr
+      uses: aws-actions/amazon-ecr-login@v2
+
+    - name: Build, tag, and push image to Amazon ECR
+      id: build-image
+      env:
+        ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+        IMAGE_TAG: ${{ github.sha }}
+      run: |
+        cd ml-model
+        docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
+        docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:latest .
+        docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+        docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
+        echo "image=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> $GITHUB_OUTPUT
+
+    - name: Wait for ECS resources
+      run: |
+        echo "Waiting for ECS cluster and service to be created..."
+        for i in {1..30}; do
+          if aws ecs describe-clusters --clusters ${{ env.ECS_CLUSTER }} --region ${{ env.AWS_REGION }} --query 'clusters[0].status' --output text | grep -q "ACTIVE"; then
+            echo "ECS cluster is ready!"
+            break
+          fi
+          echo "Attempt $i: ECS cluster not ready yet, waiting 10 seconds..."
+          sleep 10
+        done
+        
+        # Verify cluster exists and is active
+        aws ecs describe-clusters --clusters ${{ env.ECS_CLUSTER }} --region ${{ env.AWS_REGION }}
+
+    - name: Fill in the new image ID in the Amazon ECS task definition
+      id: task-def
+      uses: aws-actions/amazon-ecs-render-task-definition@v1
+      with:
+        task-definition: infrastructure/task-definition.json
+        container-name: ml-devops-dev-container
+        image: ${{ steps.build-image.outputs.image }}
+
+    - name: Deploy Amazon ECS task definition
+      uses: aws-actions/amazon-ecs-deploy-task-definition@v1
+      with:
+        task-definition: ${{ steps.task-def.outputs.task-definition }}
+        service: ${{ env.ECS_SERVICE }}
+        cluster: ${{ env.ECS_CLUSTER }}
+        wait-for-service-stability: true
+
+    - name: Run health check
+      run: |
+        echo "Waiting for service to be healthy..."
+        sleep 60
+        ALB_DNS=$(aws elbv2 describe-load-balancers --names ml-devops-dev-alb --query 'LoadBalancers[0].DNSName' --output text)
+        echo "Testing health endpoint: http://$ALB_DNS/health"
+        curl -f http://$ALB_DNS/health || exit 1
+        echo "Health check passed!"
+
 
   security-scan:
     runs-on: ubuntu-latest

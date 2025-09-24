@@ -155,7 +155,7 @@ jobs:
       id: task-def
       uses: aws-actions/amazon-ecs-render-task-definition@v1
       with:
-        task-definition: infrastructure/task-definition.json
+        task-definition: infrastructure/task-definition-generated.json
         container-name: ml-devops-dev-container
         image: ${{ steps.build-image.outputs.image }}
 

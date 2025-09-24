@@ -8,6 +8,10 @@ terraform {
       source  = "hashicorp/aws"
       version = "~> 5.0"
     }
+    local = {
+      source  = "hashicorp/local"
+      version = "~> 2.0"
+    }
   }
 }
 
@@ -467,4 +471,14 @@ resource "aws_cloudwatch_dashboard" "main" {
       }
     ]
   })
+}
+
+# Generate task definition dynamically
+resource "local_file" "task_definition" {
+  content = templatefile("${path.module}/task-definition.json", {
+    EXECUTION_ROLE_ARN = aws_iam_role.ecs_execution_role.arn
+    TASK_ROLE_ARN      = aws_iam_role.ecs_task_role.arn
+    ECR_REPOSITORY_URL = aws_ecr_repository.ml_model.repository_url
+  })
+  filename = "${path.module}/task-definition-generated.json"
 }

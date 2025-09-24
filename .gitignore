@@ -1,12 +1,22 @@
 # Terraform
 *.tfstate
 *.tfstate.*
-*.tfvars
-*.tfvars.json
 .terraform/
 .terraform.lock.hcl
-terraform.tfplan
-terraform.tfplan.*
+terraform.tfvars
+*.tfplan
+
+# Generated task definitions
+task-definition-generated.json
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# AWS credentials
+.aws/
+aws-credentials
 
 # Python
 __pycache__/
@@ -58,42 +68,6 @@ Thumbs.db
 *.log
 logs/
 
-# Docker
-.dockerignore
-
-# AWS
-.aws/
-
-# Environment variables
-.env
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local
-
-# Coverage reports
-htmlcov/
-.coverage
-.coverage.*
-coverage.xml
-*.cover
-.hypothesis/
-.pytest_cache/
-
-# Jupyter Notebook
-.ipynb_checkpoints
-
-# pyenv
-.python-version
-
-# Secrets
-secrets/
-*.pem
-*.key
-*.crt
-
 # Temporary files
-tmp/
-temp/
 *.tmp
 *.temp

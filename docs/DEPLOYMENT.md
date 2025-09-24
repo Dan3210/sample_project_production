@@ -95,7 +95,8 @@ aws ecs wait services-stable --cluster $ECS_CLUSTER --services $ECS_SERVICE
 2. Set up GitHub Secrets:
    - `AWS_ACCESS_KEY_ID`
    - `AWS_SECRET_ACCESS_KEY`
-3. Push to main branch to trigger deployment
+3. Update the task definition to use your AWS account ID
+4. Push to main branch to trigger deployment
 
 ## Post-Deployment
 
@@ -158,10 +159,10 @@ aws ecs wait services-stable --cluster $ECS_CLUSTER --services $ECS_SERVICE
 
 ```bash
 # Check ECS service status
-aws ecs describe-services --cluster ml-devops-dev-cluster --services ml-devops-dev-service
+aws ecs describe-services --cluster <YOUR_CLUSTER_NAME> --services <YOUR_SERVICE_NAME>
 
 # Check ECS task logs
-aws logs get-log-events --log-group-name /ecs/ml-devops-dev --log-stream-name <STREAM_NAME>
+aws logs get-log-events --log-group-name /ecs/<YOUR_PROJECT_NAME> --log-stream-name <STREAM_NAME>
 
 # Check ALB target health
 aws elbv2 describe-target-health --target-group-arn <TARGET_GROUP_ARN>
@@ -173,7 +174,7 @@ aws elbv2 describe-target-health --target-group-arn <TARGET_GROUP_ARN>
 
 ```bash
 # Scale ECS service
-aws ecs update-service --cluster ml-devops-dev-cluster --service ml-devops-dev-service --desired-count 5
+aws ecs update-service --cluster <YOUR_CLUSTER_NAME> --service <YOUR_SERVICE_NAME> --desired-count 5
 ```
 
 ### Auto Scaling

@@ -79,3 +79,8 @@ output "health_check_url" {
   description = "URL for health check endpoint"
   value       = "http://${aws_lb.main.dns_name}/health"
 }
+
+output "task_definition_file" {
+  description = "Path to the generated task definition file"
+  value       = local_file.task_definition.filename
+}

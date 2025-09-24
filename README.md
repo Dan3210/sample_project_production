@@ -47,7 +47,7 @@ A comprehensive DevOps project demonstrating infrastructure as code, CI/CD, and 
 - ✅ VPC with public/private subnets
 - ✅ Security groups and IAM roles
 - ✅ Secrets management
-- ✅ Blue/Green deployment strategy
+- ✅ Rolling deployment strategy with zero-downtime updates
 
 ## Quick Start
 
@@ -79,6 +79,21 @@ A comprehensive DevOps project demonstrating infrastructure as code, CI/CD, and 
    git commit -m "Initial deployment"
    git push origin main
    ```
+
+## Deployment Strategy
+
+This project uses a **rolling deployment** strategy with ECS Fargate:
+
+- **Zero-downtime deployments**: New tasks are started before old ones are terminated
+- **Health checks**: Automatic rollback if new deployment fails health checks
+- **Gradual traffic shift**: Load balancer gradually shifts traffic to new tasks
+- **Automatic scaling**: ECS handles task replacement during deployments
+
+### Deployment Methods
+
+1. **Automated CI/CD**: GitHub Actions triggers deployment on push to main branch
+2. **Manual deployment**: Use `./scripts/deploy.sh` for manual deployments
+3. **Infrastructure updates**: Terraform manages infrastructure changes
 
 ## Monitoring
 

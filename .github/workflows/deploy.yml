@@ -151,11 +151,22 @@ jobs:
         # Verify cluster exists and is active
         aws ecs describe-clusters --clusters ${{ env.ECS_CLUSTER }} --region ${{ env.AWS_REGION }}
 
+    - name: Get ECS task definition details
+      id: get-task-def
+      run: |
+        # Get the current task definition
+        TASK_DEF_ARN=$(aws ecs describe-services --cluster ${{ env.ECS_CLUSTER }} --services ${{ env.ECS_SERVICE }} --query 'services[0].taskDefinition' --output text)
+        echo "Current task definition: $TASK_DEF_ARN"
+        
+        # Get task definition details
+        aws ecs describe-task-definition --task-definition $TASK_DEF_ARN --query 'taskDefinition' > task-definition.json
+        echo "task-definition-arn=$TASK_DEF_ARN" >> $GITHUB_OUTPUT
+
     - name: Fill in the new image ID in the Amazon ECS task definition
       id: task-def
       uses: aws-actions/amazon-ecs-render-task-definition@v1
       with:
-        task-definition: infrastructure/task-definition-generated.json
+        task-definition: task-definition.json
         container-name: ml-devops-dev-container
         image: ${{ steps.build-image.outputs.image }}
 

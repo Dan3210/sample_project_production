@@ -212,10 +212,60 @@ jobs:
       run: terraform init
       working-directory: infrastructure
 
-    - name: Terraform Destroy
+    - name: Import existing resources and destroy
       run: |
         echo "Deployment failed. Cleaning up infrastructure..."
-        terraform destroy -auto-approve -var="aws_region=${{ env.AWS_REGION }}" -var="project_name=ml-devops" -var="environment=dev"
+        
+        # Import existing resources that might not be in state
+        echo "Importing existing ECR repository..."
+        terraform import aws_ecr_repository.ml_model ml-devops-dev-ml-model || echo "ECR repository not found or already in state"
+        
+        echo "Importing existing Load Balancer..."
+        terraform import aws_lb.main $(aws elbv2 describe-load-balancers --names ml-devops-dev-alb --query 'LoadBalancers[0].LoadBalancerArn' --output text) || echo "Load Balancer not found or already in state"
+        
+        echo "Importing existing Target Group..."
+        terraform import aws_lb_target_group.main $(aws elbv2 describe-target-groups --names ml-devops-dev-tg --query 'TargetGroups[0].TargetGroupArn' --output text) || echo "Target Group not found or already in state"
+        
+        echo "Importing existing CloudWatch Log Group..."
+        terraform import aws_cloudwatch_log_group.main /ecs/ml-devops-dev || echo "Log Group not found or already in state"
+        
+        # Now destroy everything
+        echo "Destroying all infrastructure..."
+        terraform destroy -auto-approve -var="aws_region=${{ env.AWS_REGION }}" -var="project_name=ml-devops" -var="environment=dev" || echo "Some resources may have already been destroyed"
+        
+        # Manual cleanup of resources that might not be in Terraform state
+        echo "Performing manual cleanup of remaining resources..."
+        
+        # Delete ECS service and cluster
+        echo "Deleting ECS service..."
+        aws ecs update-service --cluster ml-devops-dev-cluster --service ml-devops-dev-service --desired-count 0 || echo "ECS service not found"
+        aws ecs delete-service --cluster ml-devops-dev-cluster --service ml-devops-dev-service || echo "ECS service not found"
+        
+        echo "Deleting ECS cluster..."
+        aws ecs delete-cluster --cluster ml-devops-dev-cluster || echo "ECS cluster not found"
+        
+        # Delete Load Balancer
+        echo "Deleting Load Balancer..."
+        ALB_ARN=$(aws elbv2 describe-load-balancers --names ml-devops-dev-alb --query 'LoadBalancers[0].LoadBalancerArn' --output text 2>/dev/null || echo "")
+        if [ ! -z "$ALB_ARN" ] && [ "$ALB_ARN" != "None" ]; then
+          aws elbv2 delete-load-balancer --load-balancer-arn $ALB_ARN || echo "Load Balancer not found"
+        fi
+        
+        # Delete Target Group
+        echo "Deleting Target Group..."
+        TG_ARN=$(aws elbv2 describe-target-groups --names ml-devops-dev-tg --query 'TargetGroups[0].TargetGroupArn' --output text 2>/dev/null || echo "")
+        if [ ! -z "$TG_ARN" ] && [ "$TG_ARN" != "None" ]; then
+          aws elbv2 delete-target-group --target-group-arn $TG_ARN || echo "Target Group not found"
+        fi
+        
+        # Delete ECR repository
+        echo "Deleting ECR repository..."
+        aws ecr delete-repository --repository-name ml-devops-dev-ml-model --force || echo "ECR repository not found"
+        
+        # Delete CloudWatch Log Group
+        echo "Deleting CloudWatch Log Group..."
+        aws logs delete-log-group --log-group-name /ecs/ml-devops-dev || echo "Log Group not found"
+        
         echo "Infrastructure cleanup completed."
       working-directory: infrastructure
 

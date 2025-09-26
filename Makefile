@@ -18,7 +18,6 @@ help:
 	@echo "  deploy-app  - Deploy application only"
 	@echo "  health      - Run health check"
 	@echo "  clean       - Clean up local files"
-	@echo "  destroy     - Destroy AWS infrastructure"
 
 # Variables
 PROJECT_NAME = ml-devops
@@ -86,10 +85,6 @@ clean:
 	find . -type f -name ".coverage" -delete
 	find . -type d -name ".pytest_cache" -exec rm -rf {} +
 
-# Destroy AWS infrastructure
-destroy:
-	@echo "Destroying AWS infrastructure..."
-	cd infrastructure && terraform destroy
 
 # Setup development environment
 setup:

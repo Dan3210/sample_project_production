@@ -71,6 +71,3 @@ logs/
 # Temporary files
 *.tmp
 *.temp
-
-# Infrastructure destroy script (local only)
-destroy-infrastructure.sh

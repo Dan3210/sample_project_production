@@ -208,14 +208,3 @@ The infrastructure includes auto-scaling policies:
 2. **Right-size Resources**: Monitor and adjust CPU/memory allocation
 3. **Auto Scaling**: Configure appropriate min/max capacity
 4. **Log Retention**: Set appropriate CloudWatch log retention periods
-
-## Cleanup
-
-To destroy all resources:
-
-```bash
-cd infrastructure
-terraform destroy
-```
-
-**Warning**: This will permanently delete all resources and data.

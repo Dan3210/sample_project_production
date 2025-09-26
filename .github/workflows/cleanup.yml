@@ -1,0 +1,126 @@
+name: Manual Infrastructure Cleanup
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to clean up'
+        required: true
+        default: 'dev'
+        type: choice
+        options:
+          - dev
+          - staging
+          - prod
+      confirm_cleanup:
+        description: 'Type "DELETE" to confirm cleanup'
+        required: true
+        type: string
+
+env:
+  AWS_REGION: us-east-2
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    if: github.event.inputs.confirm_cleanup == 'DELETE'
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ${{ env.AWS_REGION }}
+
+    - name: Setup Terraform
+      uses: hashicorp/setup-terraform@v3
+      with:
+        terraform_version: 1.6.0
+
+    - name: Make cleanup script executable
+      run: chmod +x scripts/cleanup-github-actions.sh
+
+    - name: Run complete infrastructure cleanup
+      run: |
+        echo "🧹 Starting manual infrastructure cleanup..."
+        echo "Environment: ${{ github.event.inputs.environment }}"
+        echo "This will delete ALL AWS resources for the specified environment."
+        
+        export PROJECT_NAME="ml-devops"
+        export ENVIRONMENT="${{ github.event.inputs.environment }}"
+        export AWS_REGION="${{ env.AWS_REGION }}"
+        ./scripts/cleanup-github-actions.sh
+
+    - name: Verify cleanup completion
+      run: |
+        echo "🔍 Verifying cleanup completion for environment: ${{ github.event.inputs.environment }}..."
+        
+        PROJECT_NAME="ml-devops"
+        ENVIRONMENT="${{ github.event.inputs.environment }}"
+        AWS_REGION="${{ env.AWS_REGION }}"
+        
+        # Check ECS cluster
+        CLUSTER_NAME="${PROJECT_NAME}-${ENVIRONMENT}-cluster"
+        if aws ecs describe-clusters --clusters $CLUSTER_NAME --region $AWS_REGION &> /dev/null; then
+          echo "⚠️  ECS cluster still exists: $CLUSTER_NAME"
+        else
+          echo "✅ ECS cluster deleted: $CLUSTER_NAME"
+        fi
+        
+        # Check ECR repository
+        REPO_NAME="${PROJECT_NAME}-${ENVIRONMENT}-ml-model"
+        if aws ecr describe-repositories --repository-names $REPO_NAME --region $AWS_REGION &> /dev/null; then
+          echo "⚠️  ECR repository still exists: $REPO_NAME"
+        else
+          echo "✅ ECR repository deleted: $REPO_NAME"
+        fi
+        
+        # Check Load Balancer
+        ALB_NAME="${PROJECT_NAME}-${ENVIRONMENT}-alb"
+        if aws elbv2 describe-load-balancers --names $ALB_NAME --region $AWS_REGION &> /dev/null; then
+          echo "⚠️  Load Balancer still exists: $ALB_NAME"
+        else
+          echo "✅ Load Balancer deleted: $ALB_NAME"
+        fi
+        
+        # Check VPC
+        VPC_COUNT=$(aws ec2 describe-vpcs --filters "Name=tag:Project,Values=$PROJECT_NAME" --query 'Vpcs | length(@)' --output text)
+        if [ "$VPC_COUNT" -gt 0 ]; then
+          echo "⚠️  $VPC_COUNT VPC(s) still exist"
+        else
+          echo "✅ All VPCs deleted"
+        fi
+        
+        # Check IAM Roles
+        EXECUTION_ROLE="${PROJECT_NAME}-${ENVIRONMENT}-ecs-execution-role"
+        TASK_ROLE="${PROJECT_NAME}-${ENVIRONMENT}-ecs-task-role"
+        
+        if aws iam get-role --role-name $EXECUTION_ROLE &> /dev/null; then
+          echo "⚠️  IAM Execution Role still exists: $EXECUTION_ROLE"
+        else
+          echo "✅ IAM Execution Role deleted: $EXECUTION_ROLE"
+        fi
+        
+        if aws iam get-role --role-name $TASK_ROLE &> /dev/null; then
+          echo "⚠️  IAM Task Role still exists: $TASK_ROLE"
+        else
+          echo "✅ IAM Task Role deleted: $TASK_ROLE"
+        fi
+        
+        echo "🎉 Manual cleanup verification completed!"
+
+  cleanup-failed:
+    runs-on: ubuntu-latest
+    if: github.event.inputs.confirm_cleanup != 'DELETE'
+    steps:
+    - name: Cleanup Cancelled
+      run: |
+        echo "❌ Cleanup cancelled!"
+        echo "To confirm cleanup, you must type 'DELETE' in the confirmation field."
+        echo "This is a safety measure to prevent accidental deletion of resources."

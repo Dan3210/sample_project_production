@@ -85,7 +85,7 @@ jobs:
       working-directory: infrastructure
 
     - name: Terraform Apply
-      run: terraform destroy -auto-approve
+      run: terraform apply -auto-approve
       working-directory: infrastructure
 
   build-and-deploy:
@@ -187,89 +187,6 @@ jobs:
         curl -f http://$ALB_DNS/health || exit 1
         echo "Health check passed!"
 
-  cleanup-on-failure:
-    runs-on: ubuntu-latest
-    if: failure()
-    needs: [infrastructure, build-and-deploy]
-    
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-
-    - name: Configure AWS credentials
-      uses: aws-actions/configure-aws-credentials@v4
-      with:
-        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-        aws-region: ${{ env.AWS_REGION }}
-
-    - name: Setup Terraform
-      uses: hashicorp/setup-terraform@v3
-      with:
-        terraform_version: 1.6.0
-
-    - name: Terraform Init
-      run: terraform init
-      working-directory: infrastructure
-
-    - name: Import existing resources and destroy
-      run: |
-        echo "Deployment failed. Cleaning up infrastructure..."
-        
-        # Import existing resources that might not be in state
-        echo "Importing existing ECR repository..."
-        terraform import aws_ecr_repository.ml_model ml-devops-dev-ml-model || echo "ECR repository not found or already in state"
-        
-        echo "Importing existing Load Balancer..."
-        terraform import aws_lb.main $(aws elbv2 describe-load-balancers --names ml-devops-dev-alb --query 'LoadBalancers[0].LoadBalancerArn' --output text) || echo "Load Balancer not found or already in state"
-        
-        echo "Importing existing Target Group..."
-        terraform import aws_lb_target_group.main $(aws elbv2 describe-target-groups --names ml-devops-dev-tg --query 'TargetGroups[0].TargetGroupArn' --output text) || echo "Target Group not found or already in state"
-        
-        echo "Importing existing CloudWatch Log Group..."
-        terraform import aws_cloudwatch_log_group.main /ecs/ml-devops-dev || echo "Log Group not found or already in state"
-        
-        # Now destroy everything
-        echo "Destroying all infrastructure..."
-        terraform destroy -auto-approve -var="aws_region=${{ env.AWS_REGION }}" -var="project_name=ml-devops" -var="environment=dev" || echo "Some resources may have already been destroyed"
-        
-        # Manual cleanup of resources that might not be in Terraform state
-        echo "Performing manual cleanup of remaining resources..."
-        
-        # Delete ECS service and cluster
-        echo "Deleting ECS service..."
-        aws ecs update-service --cluster ml-devops-dev-cluster --service ml-devops-dev-service --desired-count 0 || echo "ECS service not found"
-        aws ecs delete-service --cluster ml-devops-dev-cluster --service ml-devops-dev-service || echo "ECS service not found"
-        
-        echo "Deleting ECS cluster..."
-        aws ecs delete-cluster --cluster ml-devops-dev-cluster || echo "ECS cluster not found"
-        
-        # Delete Load Balancer
-        echo "Deleting Load Balancer..."
-        ALB_ARN=$(aws elbv2 describe-load-balancers --names ml-devops-dev-alb --query 'LoadBalancers[0].LoadBalancerArn' --output text 2>/dev/null || echo "")
-        if [ ! -z "$ALB_ARN" ] && [ "$ALB_ARN" != "None" ]; then
-          aws elbv2 delete-load-balancer --load-balancer-arn $ALB_ARN || echo "Load Balancer not found"
-        fi
-        
-        # Delete Target Group
-        echo "Deleting Target Group..."
-        TG_ARN=$(aws elbv2 describe-target-groups --names ml-devops-dev-tg --query 'TargetGroups[0].TargetGroupArn' --output text 2>/dev/null || echo "")
-        if [ ! -z "$TG_ARN" ] && [ "$TG_ARN" != "None" ]; then
-          aws elbv2 delete-target-group --target-group-arn $TG_ARN || echo "Target Group not found"
-        fi
-        
-        # Delete ECR repository
-        echo "Deleting ECR repository..."
-        aws ecr delete-repository --repository-name ml-devops-dev-ml-model --force || echo "ECR repository not found"
-        
-        # Delete CloudWatch Log Group
-        echo "Deleting CloudWatch Log Group..."
-        aws logs delete-log-group --log-group-name /ecs/ml-devops-dev || echo "Log Group not found"
-        
-        echo "Infrastructure cleanup completed."
-      working-directory: infrastructure
-
-
   security-scan:
     runs-on: ubuntu-latest
     permissions:
@@ -292,3 +209,73 @@ jobs:
       if: always()
       with:
         sarif_file: 'trivy-results.sarif'
+
+  cleanup:
+    runs-on: ubuntu-latest
+    needs: [test, infrastructure, build-and-deploy]
+    if: always() && github.ref == 'refs/heads/main'
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ${{ env.AWS_REGION }}
+
+    - name: Setup Terraform
+      uses: hashicorp/setup-terraform@v3
+      with:
+        terraform_version: 1.6.0
+
+    - name: Make cleanup script executable
+      run: chmod +x scripts/cleanup-github-actions.sh
+
+    - name: Run complete infrastructure cleanup
+      run: |
+        echo "🧹 Starting complete infrastructure cleanup..."
+        echo "This will delete all AWS resources to prevent conflicts in future runs."
+        export PROJECT_NAME="ml-devops"
+        export ENVIRONMENT="dev"
+        export AWS_REGION="${{ env.AWS_REGION }}"
+        ./scripts/cleanup-github-actions.sh
+
+    - name: Verify cleanup completion
+      run: |
+        echo "🔍 Verifying cleanup completion..."
+        
+        # Check ECS cluster
+        if aws ecs describe-clusters --clusters ${{ env.ECS_CLUSTER }} --region ${{ env.AWS_REGION }} &> /dev/null; then
+          echo "⚠️  ECS cluster still exists"
+        else
+          echo "✅ ECS cluster deleted"
+        fi
+        
+        # Check ECR repository
+        if aws ecr describe-repositories --repository-names ${{ env.ECR_REPOSITORY }} --region ${{ env.AWS_REGION }} &> /dev/null; then
+          echo "⚠️  ECR repository still exists"
+        else
+          echo "✅ ECR repository deleted"
+        fi
+        
+        # Check Load Balancer
+        if aws elbv2 describe-load-balancers --names ml-devops-dev-alb --region ${{ env.AWS_REGION }} &> /dev/null; then
+          echo "⚠️  Load Balancer still exists"
+        else
+          echo "✅ Load Balancer deleted"
+        fi
+        
+        # Check VPC
+        VPC_COUNT=$(aws ec2 describe-vpcs --filters "Name=tag:Project,Values=ml-devops" --query 'Vpcs | length(@)' --output text)
+        if [ "$VPC_COUNT" -gt 0 ]; then
+          echo "⚠️  $VPC_COUNT VPC(s) still exist"
+        else
+          echo "✅ All VPCs deleted"
+        fi
+        
+        echo "🎉 Cleanup verification completed!"

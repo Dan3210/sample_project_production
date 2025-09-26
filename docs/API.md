@@ -1,26 +1,26 @@
-# ML Sentiment Analysis API Documentation
+# Sentiment Analysis API Documentation
 
 ## Overview
 
-The ML Sentiment Analysis API provides endpoints for analyzing text sentiment using a keyword-based machine learning model. The API is containerized and deployed on AWS ECS with auto-scaling capabilities.
+This API provides sentiment analysis capabilities using a keyword-based approach. It analyzes text input and returns sentiment classification (positive, negative, or neutral) with confidence scores.
 
 ## Base URL
 
 ```
-http://<ALB_DNS_NAME>/
+http://your-alb-dns-name
 ```
 
 ## Authentication
 
-Currently, no authentication is required. In production, consider implementing API keys or OAuth.
+Currently, no authentication is required. All endpoints are publicly accessible.
 
 ## Endpoints
 
-### Health Check
+### 1. Health Check
 
 **GET** `/health`
 
-Check the health status of the API service.
+Check if the service is running and healthy.
 
 **Response:**
 ```json
@@ -37,11 +37,13 @@ Check the health status of the API service.
 curl http://your-alb-dns/health
 ```
 
-### Root Endpoint
+---
+
+### 2. API Information
 
 **GET** `/`
 
-Get API information and available endpoints.
+Get API documentation and available endpoints.
 
 **Response:**
 ```json
@@ -64,63 +66,97 @@ Get API information and available endpoints.
     },
     "batch_predict": {
       "method": "POST",
-      "body": {"texts": ["string1", "string2", ...]},
+      "body": {"texts": ["string1", "string2"]},
       "description": "Predict sentiment of multiple texts"
     }
   }
 }
 ```
 
-### Single Text Prediction
+---
+
+### 3. Single Text Sentiment Analysis
 
 **POST** `/predict`
 
-Predict the sentiment of a single text input.
+Analyze the sentiment of a single text input.
 
 **Request Body:**
 ```json
 {
-  "text": "This is a great product!"
+  "text": "This product is amazing and I love it!"
 }
 ```
+
+**Parameters:**
+- `text` (string, required): Text to analyze (max 1000 characters)
 
 **Response:**
 ```json
 {
   "prediction": {
     "sentiment": "positive",
-    "confidence": 0.8,
-    "positive_words": 1,
+    "confidence": 0.667,
+    "positive_words": 2,
     "negative_words": 0
   },
-  "input_text": "This is a great product!",
+  "input_text": "This product is amazing and I love it!",
   "model_version": "1.0.0"
 }
 ```
 
+**Response Fields:**
+- `prediction.sentiment`: "positive", "negative", or "neutral"
+- `prediction.confidence`: Confidence score (0.0 to 1.0)
+- `prediction.positive_words`: Count of positive keywords found
+- `prediction.negative_words`: Count of negative keywords found
+- `input_text`: Original input text
+- `model_version`: Version of the sentiment analysis model
+
 **Example:**
 ```bash
 curl -X POST http://your-alb-dns/predict \
-  -H 'Content-Type: application/json' \
-  -d '{"text": "This is a great product!"}'
+  -H "Content-Type: application/json" \
+  -d '{"text": "This product is amazing and I love it!"}'
 ```
 
-### Batch Prediction
+**Error Responses:**
+
+**400 Bad Request** - Invalid input:
+```json
+{
+  "error": "Missing required field: text"
+}
+```
+
+**400 Bad Request** - Text too long:
+```json
+{
+  "error": "Text too long. Maximum 1000 characters allowed."
+}
+```
+
+---
+
+### 4. Batch Sentiment Analysis
 
 **POST** `/batch-predict`
 
-Predict sentiment for multiple texts in a single request.
+Analyze sentiment for multiple texts in a single request.
 
 **Request Body:**
 ```json
 {
   "texts": [
-    "This is great!",
-    "This is terrible!",
-    "This is okay."
+    "Great product!",
+    "Terrible service",
+    "It's okay"
   ]
 }
 ```
+
+**Parameters:**
+- `texts` (array, required): Array of texts to analyze (max 100 texts)
 
 **Response:**
 ```json
@@ -130,21 +166,21 @@ Predict sentiment for multiple texts in a single request.
       "index": 0,
       "prediction": {
         "sentiment": "positive",
-        "confidence": 0.8,
+        "confidence": 1.0,
         "positive_words": 1,
         "negative_words": 0
       },
-      "input_text": "This is great!"
+      "input_text": "Great product!"
     },
     {
       "index": 1,
       "prediction": {
         "sentiment": "negative",
-        "confidence": 0.8,
+        "confidence": 1.0,
         "positive_words": 0,
         "negative_words": 1
       },
-      "input_text": "This is terrible!"
+      "input_text": "Terrible service"
     },
     {
       "index": 2,
@@ -154,7 +190,7 @@ Predict sentiment for multiple texts in a single request.
         "positive_words": 0,
         "negative_words": 0
       },
-      "input_text": "This is okay."
+      "input_text": "It's okay"
     }
   ],
   "total_texts": 3,
@@ -165,15 +201,33 @@ Predict sentiment for multiple texts in a single request.
 **Example:**
 ```bash
 curl -X POST http://your-alb-dns/batch-predict \
-  -H 'Content-Type: application/json' \
-  -d '{"texts": ["Great!", "Terrible!", "Okay."]}'
+  -H "Content-Type: application/json" \
+  -d '{"texts": ["Great product!", "Terrible service", "It'\''s okay"]}'
 ```
 
-### Metrics
+**Error Responses:**
+
+**400 Bad Request** - Invalid input:
+```json
+{
+  "error": "Missing required field: texts"
+}
+```
+
+**400 Bad Request** - Too many texts:
+```json
+{
+  "error": "Too many texts. Maximum 100 texts allowed."
+}
+```
+
+---
+
+### 5. Model Metrics
 
 **GET** `/metrics`
 
-Get model metrics and performance statistics.
+Get model information and performance metrics.
 
 **Response:**
 ```json
@@ -197,190 +251,115 @@ Get model metrics and performance statistics.
 }
 ```
 
+---
+
 ## Sentiment Analysis Model
 
-### Model Type
-Keyword-based sentiment analysis using predefined positive and negative word dictionaries.
+### How It Works
 
-### Supported Sentiments
-- **Positive**: Text containing positive sentiment words
-- **Negative**: Text containing negative sentiment words  
-- **Neutral**: Text with no clear sentiment or mixed sentiment
+The sentiment analysis model uses a keyword-based approach:
 
-### Confidence Score
-- Range: 0.0 to 1.0
-- Based on the ratio of sentiment words to total sentiment words
-- Higher values indicate stronger confidence in the prediction
+1. **Text Preprocessing**: Removes punctuation and converts to lowercase
+2. **Keyword Matching**: Counts positive and negative keywords
+3. **Sentiment Classification**: 
+   - If positive keywords > negative keywords → "positive"
+   - If negative keywords > positive keywords → "negative"
+   - If equal or no keywords → "neutral"
+4. **Confidence Calculation**: Based on the ratio of sentiment keywords
 
 ### Positive Keywords
-```
-good, great, excellent, amazing, wonderful, fantastic, awesome, brilliant, 
-outstanding, perfect, love, like, happy, pleased, satisfied, impressed, recommend
-```
+
+- good, great, excellent, amazing, wonderful, fantastic, awesome, brilliant, outstanding, perfect, love, like, happy, pleased, satisfied, impressed, recommend
 
 ### Negative Keywords
-```
-bad, terrible, awful, horrible, disappointing, hate, dislike, angry, frustrated, 
-annoyed, poor, worst, useless, broken, failed, error, problem, issue
-```
+
+- bad, terrible, awful, horrible, disappointing, hate, dislike, angry, frustrated, annoyed, poor, worst, useless, broken, failed, error, problem, issue
+
+### Limitations
+
+- **Language**: Currently supports English only
+- **Context**: Does not understand context or sarcasm
+- **Complexity**: Simple keyword matching may not capture nuanced sentiment
+- **Accuracy**: Best suited for straightforward positive/negative sentiment
+
+---
 
 ## Error Handling
 
-### HTTP Status Codes
+### Common Error Codes
 
-- **200 OK**: Successful request
-- **400 Bad Request**: Invalid input or missing required fields
-- **404 Not Found**: Endpoint not found
-- **405 Method Not Allowed**: HTTP method not allowed for endpoint
-- **500 Internal Server Error**: Server error
+- **400 Bad Request**: Invalid input parameters
+- **404 Not Found**: Endpoint does not exist
+- **405 Method Not Allowed**: HTTP method not supported
+- **500 Internal Server Error**: Server-side error
 
 ### Error Response Format
 
 ```json
 {
-  "error": "Error type",
+  "error": "Error description",
   "message": "Detailed error message"
 }
 ```
 
-### Common Errors
-
-1. **Missing Text Field**:
-   ```json
-   {
-     "error": "Missing required field: text"
-   }
-   ```
-
-2. **Empty Text**:
-   ```json
-   {
-     "error": "Text must be a non-empty string"
-   }
-   ```
-
-3. **Text Too Long**:
-   ```json
-   {
-     "error": "Text too long. Maximum 1000 characters allowed."
-   }
-   ```
-
-4. **Too Many Texts in Batch**:
-   ```json
-   {
-     "error": "Too many texts. Maximum 100 texts allowed."
-   }
-   ```
+---
 
 ## Rate Limits
 
-Currently, no rate limits are implemented. In production, consider implementing:
-- Per-IP rate limiting
-- API key-based rate limiting
-- Request throttling
+Currently, no rate limits are enforced. However, the service is designed to handle reasonable load through auto-scaling.
 
 ## Monitoring
 
-### Health Monitoring
-- Health check endpoint: `/health`
-- ALB health checks every 30 seconds
-- Container health checks every 30 seconds
+The API sends metrics to CloudWatch:
+- `Predictions`: Number of predictions made
+- `BatchPredictions`: Number of batch predictions made
+- `TextLength`: Length of input text
+- `BatchSize`: Size of batch requests
+- `Errors`: Number of errors encountered
 
-### Metrics
-- Custom CloudWatch metrics for predictions, errors, and text length
-- ECS service metrics (CPU, memory, task count)
-- ALB metrics (request count, response time, error rates)
-
-### Logging
-- Application logs in CloudWatch Logs
-- Structured JSON logging
-- Error tracking and alerting
-
-## Performance
-
-### Response Times
-- Typical response time: < 100ms
-- Batch processing: < 500ms for 100 texts
-- Health check: < 50ms
-
-### Throughput
-- Designed for high availability with auto-scaling
-- Can handle concurrent requests
-- Load balanced across multiple ECS tasks
-
-## Security
-
-### Network Security
-- VPC with private subnets for ECS tasks
-- Security groups with least privilege access
-- HTTPS termination at ALB (when configured)
-
-### Data Privacy
-- No persistent storage of input text
-- Logs may contain request data (configure as needed)
-- Consider data encryption in transit and at rest
+---
 
 ## Examples
 
-### Python Client
+### Python Example
 
 ```python
 import requests
-import json
-
-# API base URL
-BASE_URL = "http://your-alb-dns"
 
 # Single prediction
-def predict_sentiment(text):
-    response = requests.post(
-        f"{BASE_URL}/predict",
-        json={"text": text}
-    )
-    return response.json()
+response = requests.post('http://your-alb-dns/predict', 
+                        json={'text': 'This is amazing!'})
+result = response.json()
+print(f"Sentiment: {result['prediction']['sentiment']}")
 
 # Batch prediction
-def batch_predict(texts):
-    response = requests.post(
-        f"{BASE_URL}/batch-predict",
-        json={"texts": texts}
-    )
-    return response.json()
-
-# Example usage
-result = predict_sentiment("This is amazing!")
-print(f"Sentiment: {result['prediction']['sentiment']}")
-print(f"Confidence: {result['prediction']['confidence']}")
+response = requests.post('http://your-alb-dns/batch-predict',
+                        json={'texts': ['Great!', 'Terrible!', 'Okay']})
+results = response.json()
+for item in results['results']:
+    print(f"Text: {item['input_text']} -> {item['prediction']['sentiment']}")
 ```
 
-### JavaScript Client
+### JavaScript Example
 
 ```javascript
 // Single prediction
-async function predictSentiment(text) {
-    const response = await fetch('http://your-alb-dns/predict', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ text: text })
-    });
-    return await response.json();
-}
+const response = await fetch('http://your-alb-dns/predict', {
+  method: 'POST',
+  headers: {'Content-Type': 'application/json'},
+  body: JSON.stringify({text: 'This is amazing!'})
+});
+const result = await response.json();
+console.log(`Sentiment: ${result.prediction.sentiment}`);
 
-// Example usage
-predictSentiment("This is great!")
-    .then(result => {
-        console.log(`Sentiment: ${result.prediction.sentiment}`);
-        console.log(`Confidence: ${result.prediction.confidence}`);
-    });
+// Batch prediction
+const batchResponse = await fetch('http://your-alb-dns/batch-predict', {
+  method: 'POST',
+  headers: {'Content-Type': 'application/json'},
+  body: JSON.stringify({texts: ['Great!', 'Terrible!', 'Okay']})
+});
+const batchResults = await batchResponse.json();
+batchResults.results.forEach(item => {
+  console.log(`Text: ${item.input_text} -> ${item.prediction.sentiment}`);
+});
 ```
-
-## Support
-
-For issues or questions:
-1. Check the health endpoint first
-2. Review CloudWatch logs
-3. Check the deployment documentation
-4. Contact the development team

@@ -80,6 +80,64 @@ jobs:
       run: terraform validate
       working-directory: infrastructure
 
+    - name: Import Existing Resources
+      run: |
+        echo "Checking for existing resources and importing them..."
+        
+        # Function to safely import resource
+        import_resource() {
+          local resource_name=$1
+          local aws_resource_id=$2
+          local check_command=$3
+          
+          echo "Checking if $resource_name exists in state..."
+          if ! terraform state show $resource_name >/dev/null 2>&1; then
+            echo "Resource $resource_name not in state, checking if it exists in AWS..."
+            if eval "$check_command" >/dev/null 2>&1; then
+              echo "Importing existing resource: $resource_name ($aws_resource_id)"
+              terraform import $resource_name $aws_resource_id || echo "Import failed for $resource_name, will be handled during apply"
+            else
+              echo "Resource $aws_resource_id does not exist in AWS, will be created"
+            fi
+          else
+            echo "Resource $resource_name already in state"
+          fi
+        }
+        
+        # Import ECR repository if it exists
+        import_resource "aws_ecr_repository.ml_model" "ml-devops-dev-ml-model" "aws ecr describe-repositories --repository-names ml-devops-dev-ml-model --region ${{ env.AWS_REGION }}"
+        
+        # Import ECS cluster if it exists
+        import_resource "aws_ecs_cluster.main" "ml-devops-dev-cluster" "aws ecs describe-clusters --clusters ml-devops-dev-cluster --region ${{ env.AWS_REGION }}"
+        
+        # Import ALB if it exists
+        import_resource "aws_lb.main" "ml-devops-dev-alb" "aws elbv2 describe-load-balancers --names ml-devops-dev-alb --region ${{ env.AWS_REGION }}"
+        
+        # Import ALB Target Group if it exists
+        import_resource "aws_lb_target_group.main" "ml-devops-dev-tg" "aws elbv2 describe-target-groups --names ml-devops-dev-tg --region ${{ env.AWS_REGION }}"
+        
+        # Import ALB Listener if it exists
+        ALB_ARN=$(aws elbv2 describe-load-balancers --names ml-devops-dev-alb --query 'LoadBalancers[0].LoadBalancerArn' --output text --region ${{ env.AWS_REGION }} 2>/dev/null || echo "")
+        if [ ! -z "$ALB_ARN" ]; then
+          LISTENER_ARN=$(aws elbv2 describe-listeners --load-balancer-arn $ALB_ARN --query 'Listeners[0].ListenerArn' --output text --region ${{ env.AWS_REGION }} 2>/dev/null || echo "")
+          if [ ! -z "$LISTENER_ARN" ] && ! terraform state show aws_lb_listener.main >/dev/null 2>&1; then
+            echo "Importing ALB Listener: $LISTENER_ARN"
+            terraform import aws_lb_listener.main $LISTENER_ARN || echo "Import failed for ALB Listener"
+          fi
+        fi
+        
+        # Import ECS Task Definition if it exists
+        import_resource "aws_ecs_task_definition.main" "ml-devops-dev-task" "aws ecs describe-task-definition --task-definition ml-devops-dev-task --region ${{ env.AWS_REGION }}"
+        
+        # Import ECS Service if it exists
+        import_resource "aws_ecs_service.main" "ml-devops-dev-service" "aws ecs describe-services --cluster ml-devops-dev-cluster --services ml-devops-dev-service --region ${{ env.AWS_REGION }}"
+        
+        # Import CloudWatch Log Group if it exists
+        import_resource "aws_cloudwatch_log_group.main" "/ecs/ml-devops-dev" "aws logs describe-log-groups --log-group-name-prefix /ecs/ml-devops-dev --region ${{ env.AWS_REGION }}"
+        
+        echo "Resource import process completed"
+      working-directory: infrastructure
+
     - name: Terraform Plan
       run: terraform plan -out=tfplan
       working-directory: infrastructure
